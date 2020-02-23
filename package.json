@@ -1,0 +1,27 @@
+{
+  "name": "tele2",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "npm run build | node dist/main.js",
+    "exe": "npm run build | nexe -i dist/main.js -o build/tele2.exe",
+    "build": "babel ./src/**/*.js -d dist/"
+  },
+  "keywords": [],
+  "author": "klonwar",
+  "license": "ISC",
+  "dependencies": {
+    "chalk": "^3.0.0",
+    "nexe": "^3.3.2",
+    "npm": "^6.13.4",
+    "puppeteer": "^2.0.0",
+    "readline": "^1.3.0"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.8.4",
+    "@babel/core": "^7.8.4",
+    "@babel/plugin-proposal-class-properties": "^7.8.3",
+    "@babel/preset-env": "^7.8.4"
+  }
+}

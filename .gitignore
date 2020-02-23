@@ -1,0 +1,8 @@
+node_modules/
+dist/
+build/
+db/
+src/test.js
+.idea/
+*.exe
+package-lock.json
