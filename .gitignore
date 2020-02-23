@@ -1,8 +1,9 @@
 node_modules/
 dist/
-build/
+build/db
 db/
 src/test.js
 .idea/
 *.exe
+!build/tele2.exe
 package-lock.json
