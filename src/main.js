@@ -159,7 +159,7 @@ import Functions from "./functions";
           await Functions.wClick(page, s);
 
           s = `.lot-setup__cost-field-container input[pattern="[0-9]*"]`;
-          rnd = Functions.rand();
+          rnd = Functions.rand()+100;
           await Functions.wClick(page, s);
           await page.click(s, {clickCount: 2});
           await page.type(s, db.price, {delay: rnd});
