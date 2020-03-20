@@ -13,7 +13,7 @@ import Functions from "./functions";
     console.log(`-x ${Chalk.yellow(s)}`);
   };
 
-  let balance0 = -1000000;
+  let balance0 = "-1000000";
   let s, b, bought, rnd, erCount;
 
 
@@ -54,7 +54,7 @@ import Functions from "./functions";
           s = `form.keycloak-login-form input[type="tel"]`;
           await Functions.wClick(page, s);
           await Functions.wClick(page, s, 500);
-          await page.type(s, db.phone);
+          await page.type(s, db.phone + "");
 
           await Functions.wClick(page, `form.keycloak-login-form button[type="submit"]`);
 
@@ -65,7 +65,7 @@ import Functions from "./functions";
           s = `form.keycloak-login-form input[type="password"]`;
           const rnd = Functions.rand();
           await page.waitFor(s);
-          await page.type(s, db.password, {delay: rnd});
+          await page.type(s, db.password + "", {delay: rnd});
 
           await page.waitFor(500);
           await Functions.wClick(page, `form.keycloak-login-form button[type="submit"]`);
@@ -101,7 +101,7 @@ import Functions from "./functions";
       await page.goto(`https://voronezh.tele2.ru/stock-exchange/my`, {waitUntil: `load`});
       await page.waitFor(`.my-lot-item:first-child`);
 
-      if (balance0 === -1000000) {
+      if (balance0 === "-1000000") {
         balance0 = await Functions.getBalance(page);
       }
       b = await Functions.getBalance(page);
@@ -153,16 +153,16 @@ import Functions from "./functions";
           rnd = Functions.rand();
           await Functions.wClick(page, s);
           await page.click(s, {clickCount: 2});
-          await page.type(s, db.amount, {delay: rnd});
+          await page.type(s, db.amount + "", {delay: rnd});
 
           s = `.lot-setup__cost-field-container > .lot-setup__manual-input > a`;
           await Functions.wClick(page, s);
 
           s = `.lot-setup__cost-field-container input[pattern="[0-9]*"]`;
-          rnd = Functions.rand()+100;
+          rnd = Functions.rand() + 100;
           await Functions.wClick(page, s);
           await page.click(s, {clickCount: 2});
-          await page.type(s, db.price, {delay: rnd});
+          await page.type(s, db.price + "", {delay: rnd});
 
           s = `.btns-box .btn-black`;
           await Functions.wClick(page, s);
@@ -181,19 +181,18 @@ import Functions from "./functions";
 
           rnd = Functions.rand8();
 
-          if (rnd > 4) {
-            await Functions.wClick(page, `.lot-message-form__name-checkbox label[for="showSellerName"]`);
-          }
-
+          await Functions.wClick(page, `.lot-message-form__name-checkbox label[for="showSellerName"]`);
           await Functions.wClick(page, `#exchangeLotPersonalizationPopup .btns-box .btn-black`);
 
           s = `#exchangeLotPersonalizationPopup`;
           await page.waitFor(`#exchangeLotPersonalizationPopup`, {hidden: true});
         } catch (e) {
           if (erCount >= db.iterations) {
+            AddException.message += `\n` + e.message;
             AddException.handle();
           }
           warn(`Unknown trouble. Repeating`);
+          warn(e.message);
           erCount++;
           i--;
         }
