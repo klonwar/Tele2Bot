@@ -1,6 +1,7 @@
-const Cp = require('child_process');
-const Fs = require(`fs`);
+/* global document */
 
+const Cp = require(`child_process`);
+const Fs = require(`fs`);
 
 export default class Functions {
 
@@ -32,7 +33,7 @@ export default class Functions {
   static readExp = async (rexp) => {
     let num = `!`;
     const regexp = new RegExp(rexp);
-    while (num.match(regexp) == null) {
+    while (num.match(regexp) === null) {
       num = await this.read();
     }
 
@@ -49,7 +50,6 @@ export default class Functions {
     out = Fs.createWriteStream(`./db/.db`, {flags: `w`});
 
     out.write(`PHONE:${db.phone}\n`);
-    out.write(`PASSWORD:${db.password}\n`);
     out.write(`ITERATIONS:${db.iterations}\n`);
     out.write(`DELAY:${db.delay}\n`);
     out.write(`SOURCE:${db.source}\n`);
@@ -64,40 +64,43 @@ export default class Functions {
     this.log(`--> Phone WITHOUT 8`);
     db.phone = await this.readExp(/[0-9]{10}/);
 
-    this.log(`--> Password`);
-    db.password = await this.read();
-
     this.log(`--> Number of active lots (default = 3)`);
     db.iterations = await this.readExp(/(^[0-9]{1,2}$)|(^\s*$)/);
-    if (db.iterations.match(new RegExp(/^\s*$/)))
+    if (db.iterations.match(new RegExp(/^\s*$/))) {
       db.iterations = 3;
+    }
 
     this.log(`--> Delay between attempts in seconds (default = 20)`);
     db.delay = await this.readExp(/(^[0-9]{1,2}$)|(^\s*$)/);
-    if (db.delay.match(new RegExp(/^\s*$/)))
+    if (db.delay.match(new RegExp(/^\s*$/))) {
       db.delay = 20;
+    }
 
     this.log(`--> Minutes? [Y/N] (default = Y)`);
     db.source = await this.readExp(/(^[A-Za-z]$)|(^\s*$)/);
-    if (db.source.match(new RegExp(/^\s*$/)))
+    if (db.source.match(new RegExp(/^\s*$/))) {
       db.source = `calls`;
-    else
+    } else {
       db.source = (db.source === `N` || db.source === `n`) ? `internet` : `calls`;
+    }
 
     this.log(`--> Lot amount (default = ${((db.source === `calls`) ? `50` : `3`)})`);
     db.amount = await this.readExp(/(^[0-9]{1,3}$)|(^\s*$)/);
-    if (db.amount.match(new RegExp(/^\s*$/)))
+    if (db.amount.match(new RegExp(/^\s*$/))) {
       db.amount = (db.source === `calls`) ? 50 : 3;
+    }
 
-    let m_price, i_price;
+    let mPrice;
+    let iPrice;
     // old_m_price = Math.floor((db.amount + 1) / 2);
-    m_price = db.amount - 10 - Math.floor((db.amount - 50) / 5);
-    i_price = 15 * db.amount;
+    mPrice = db.amount - 10 - Math.floor((db.amount - 50) / 5);
+    iPrice = 15 * db.amount;
 
-    this.log(`--> Price (default = ${((db.source === `calls`) ? m_price : i_price)})`);
+    this.log(`--> Price (default = ${((db.source === `calls`) ? mPrice : iPrice)})`);
     db.price = await this.readExp(/(^[0-9]{1,3}$)|(^\s*$)/);
-    if (db.price.match(new RegExp(/^\s*$/)))
-      db.price = (db.source === `calls`) ? m_price : i_price;
+    if (db.price.match(new RegExp(/^\s*$/))) {
+      db.price = (db.source === `calls`) ? mPrice : iPrice;
+    }
 
     await this.saveDb(db);
     this.log(`- Information saved successfully`);
@@ -107,7 +110,6 @@ export default class Functions {
     const db = {
       validate: function f() {
         return !(db.phone === undefined ||
-          db.password === undefined ||
           db.iterations === undefined ||
           db.delay === undefined ||
           db.source === undefined ||
@@ -161,10 +163,11 @@ export default class Functions {
 
   static getBalance = async (page, timeout = -1) => {
     const s = `.profile-popup_balance-value span`;
-    if (timeout > 0)
-      await page.waitFor(s, {timeout: timeout});
-    else
+    if (timeout > 0) {
+      await page.waitFor(s, {timeout});
+    } else {
       await page.waitFor(s);
+    }
     let b = await page.evaluate((selector) => {
       return document.querySelector(selector).innerHTML;
     }, s);
@@ -181,43 +184,48 @@ export default class Functions {
 
   static rand8 = () => {
     let t = Math.floor(1 + Math.random() * 10);
-    if (t > 8)
+    if (t > 8) {
       t = 4;
+    }
 
     return t;
   };
 
   static wClick = async (page, s, time = -1) => {
-    if (time > 0)
+    if (time > 0) {
       await page.waitFor(time);
-    else
+    } else {
       await page.waitFor(s);
+    }
     await page.click(s);
   };
 
 
-  static askForBD = async (db) => {
+  static askForDB = async (db) => {
     if (!db.validate()) {
       await this.rewriteDb(db);
     } else {
       this.log(`- Read information from DB? [Y/N] (default = Y)`);
       let res = await this.readExp(/(^[A-Za-z]$)|(^\s*$)/);
-      if (res.match(new RegExp(/^\s*$/)))
+      if (res.match(new RegExp(/^\s*$/))) {
         res = `Y`;
-      if (res === `N` || res === `n`)
+      }
+      if (res === `N` || res === `n`) {
         await this.rewriteDb(db);
+      }
     }
   };
 
 
-  static readCookies = (s = `cookies.json`) => {
+  static readCookies = (s = `./db/cookies.json`) => {
     return new Promise((resolve) => {
       (async () => {
-        await Fs.readFile(`./db/cookies.json`, (e, data) => {
-          if (e || data == null)
+        await Fs.readFile(s, (e, data) => {
+          if (e || data === null) {
             resolve(null);
-          else
+          } else {
             resolve(JSON.parse(data.toString()));
+          }
         });
       })();
     });
@@ -225,13 +233,15 @@ export default class Functions {
 
 
   static askForCookies = async (cookies) => {
-    if (cookies != null) {
+    if (cookies !== null) {
       this.log(`- Restore previously saved cookies? [Y/N] (default = Y)`);
       let res = await this.readExp(/(^[A-Za-z]$)|(^\s*$)/);
-      if (res.match(new RegExp(/^\s*$/)))
+      if (res.match(new RegExp(/^\s*$/))) {
         res = `Y`;
-      if (res === `N` || res === `n`)
+      }
+      if (res === `N` || res === `n`) {
         res = `N`;
+      }
 
       return res === `Y`;
     } else {
@@ -245,7 +255,8 @@ export default class Functions {
     } catch (e) {
       console.log(`> Could not resolve ${module}. Installing...`);
       Cp.execSync(`npm install ${module}`);
-      await setImmediate(() => {});
+      await setImmediate(() => {
+      });
       console.log(`> "${module}" has been installed`);
     }
 
@@ -254,6 +265,25 @@ export default class Functions {
     } catch (e) {
       console.log(`Could not include "${module}". Restart the script`);
       process.exit(1);
+      return false;
     }
+  };
+
+  static getPuppeteerResponse = async (request) => {
+    const fetch = await Functions.require(`node-fetch`);
+
+    const response = await fetch(request.url(), {
+      body: request.postData(),
+      headers: request.headers(),
+      method: request.method(),
+    });
+
+    const json = await response.json();
+
+    return {
+      body: JSON.stringify(json),
+      headers: JSON.stringify(response.headers),
+      status: response.status
+    };
   }
 }
