@@ -1,19 +1,35 @@
 import Fs from "fs";
-import {LoginException, AddException, DeleteException, InternetException, BaseException} from "./exceptions";
+import {LoginException, InternetException, BaseException} from "./exceptions";
 import {
   askForCookies,
   askForDB,
   autoRequire, getBalance,
-  isLogined, linkGetterGenerator, rand, rand8,
+  isLogined, linkGetterGenerator, rand, rand8, read,
   readCookies,
   readDb, readExp, repeatIfError,
   wClick
 } from "./functions";
-import {log, warn} from "./logger";
-import fetch from "node-fetch";
+import {log, printTable, warn} from "./logger";
 
 (async () => {
+
+    /*let input = `undergrounder`;
+    let grade = 0;
+    let half = Math.floor(input.length / 2);
+    let delta = (input.length % 2 === 0) ? half : half + 1;
+    for (let i = half; i >= 0; i--) {
+      let j = i + delta;
+      if (input[i] === input[j])
+        grade++;
+      else
+        grade = 0;
+    }
+
+
+    console.log(grade);*/
+
     await autoRequire(`puppeteer`);
+    await autoRequire(`string-length`);
     await autoRequire(`puppeteer-extra`);
     await autoRequire(`chalk`);
     await autoRequire(`node-fetch`);
@@ -22,6 +38,7 @@ import fetch from "node-fetch";
 
     const puppeteer = require(`puppeteer-extra`);
     const chalk = require(`chalk`);
+    const fetch = require(`node-fetch`);
     const stealthPlugin = require(`puppeteer-extra-plugin-stealth`);
     puppeteer.use(stealthPlugin());
 
@@ -50,9 +67,9 @@ import fetch from "node-fetch";
       const cookiesFromFile = await readCookies();
       const restoreCookies = await askForCookies(cookiesFromFile);
 
-      log(`- Starting up`);
+      // log(`- Starting up`);
 
-      const browser = await puppeteer.launch({headless: !opt.dev, args: [`--start-fullscreen`]});
+      const browser = await puppeteer.launch({headless: !opt.dev, args: [`--start-maximized`]});
       const context = browser.defaultBrowserContext();
       await context.overridePermissions(getLink(), []);
       const page = await browser.newPage();
@@ -60,7 +77,7 @@ import fetch from "node-fetch";
       await page.setViewport({width: 1400, height: 550});
 
       if (restoreCookies) {
-        log(`- Restoring Cookies`);
+        // log(`- Restoring Cookies`);
         await page.setCookie(...cookiesFromFile);
       }
 
@@ -133,7 +150,7 @@ import fetch from "node-fetch";
 
             warn(`Unknown trouble. Repeating`);
           } catch (e) {
-            warn(`[${e.message}]. Repeating`);
+            warn(`LOGIN: [${e.message}]. Repeating`);
           }
 
           if (erCount === 3) {
@@ -147,6 +164,8 @@ import fetch from "node-fetch";
 
       // Теле 2 хреново сделали историю лотов, приходится фиксить мне
 
+      let userInfo = {};
+
       await page.setRequestInterception(true);
       await page.on(`request`, async (request) => {
         if (request.url().endsWith(`created`) && request.method() === `GET`) {
@@ -158,6 +177,46 @@ import fetch from "node-fetch";
           })).json();
 
           if (response.data) {
+            if (!userInfo?.sold) {
+
+              userInfo.sold = {
+                internet: 0,
+                calls: 0,
+              };
+              userInfo.placed = {
+                internet: 0,
+                calls: 0,
+              };
+              userInfo.dBalance = 0;
+
+
+              for (let item of response.data) {
+
+                /**
+                 * @param item {object}
+                 * @param item.expirationDate {string}
+                 * @param item.trafficType {string}
+                 * @param item.cost {object}
+                 * */
+
+                const expirationDate = new Date(item.expirationDate);
+                const nowDate = new Date();
+                if (nowDate <= expirationDate) {
+                  if (item.trafficType === `voice`) {
+                    userInfo.placed.calls++;
+                    userInfo.sold.calls += (item.status === `bought`) ? 1 : 0;
+                  } else if (item.trafficType === `data`) {
+                    userInfo.placed.internet++;
+                    userInfo.sold.internet += (item.status === `bought`) ? 1 : 0;
+                  }
+
+                  if (item.status === `bought`) {
+                    userInfo.dBalance += item.cost.amount;
+                  }
+                }
+              }
+            }
+
             response.data = response.data.filter((item) => {
               if (item.status === `active`) {
                 return true;
@@ -176,22 +235,80 @@ import fetch from "node-fetch";
             contentType: `application/json`,
             body: JSON.stringify(response),
           });
+        } else if (request.url().endsWith(`rests`) && request.method() === `GET`) {
+          const response = await (await fetch(request.url(), {
+            method: request.method(),
+            credentials: `include`,
+            body: request.postData(),
+            headers: request.headers()
+          })).json();
+
+          if (response.data) {
+            if (!userInfo?.rests) {
+              const item = response.data;
+
+              /**
+               * @param item {object}
+               * @param item.tariffCost {object}
+               * @param item.tariffCost.amount {string}
+               * @param item.tariffPackages {object}
+               * @param item.tariffPackages.internet {string}
+               * @param item.tariffPackages.min {string}
+               * */
+
+              userInfo.rests = {
+                tariffCost: item.tariffCost.amount,
+                internet: item.tariffPackages.internet,
+                calls: item.tariffPackages.min
+              };
+            }
+          }
+
+          await request.respond({
+            status: 200,
+            contentType: `application/json`,
+            body: JSON.stringify(response),
+          });
         } else {
           await request.continue();
         }
       });
 
-      /*
-            await page.goto(getLink(`/stock-exchange/my`), {waitUntil: `load`});
-            await page.waitFor(900000);
-      */
+
+      await page.goto(getLink(`/stock-exchange/my`), {waitUntil: `load`});
+      await page.waitFor(`.preloader-icon`, {hidden: true, timeout: 30000});
+      // await page.waitFor(900000);
+
+      if (userInfo.sold && userInfo.rests) {
+        let pfDelta = userInfo.dBalance - userInfo.rests.tariffCost;
+        let pfString = `${((pfDelta >= 0)) ? chalk.green(`+ ` + Math.abs(pfDelta) + ` р.`) : chalk.red(`- ` + Math.abs(pfDelta) + ` р.`)}`;
+
+        printTable(`CURRENT PERIOD DYNAMICS:`, [
+          `Calls: ${chalk.green(userInfo.sold.calls)} lot${(userInfo.sold.calls !== 1) ? `s` : ``} / ${userInfo.placed.calls} bought`,
+          `Internet: ${chalk.green(userInfo.sold.internet)} lot${(userInfo.sold.internet !== 1) ? `s` : ``} / ${userInfo.placed.internet} bought`,
+          `Balance: ${chalk.green(`+ ${userInfo.dBalance} р.`)}`
+        ], `ACCOUNT INFO:`, [
+          `Calls left: ${userInfo.rests.calls} МИН`,
+          `Internet left: ${userInfo.rests.internet}`,
+          `Tariff cost: ${userInfo.rests.tariffCost} р.`,
+        ], `Profit: ${pfString}`);
+      } else {
+        printTable([
+          `NO INFO`
+        ]);
+      }
 
       // Цикл удаление - заполнение
+
       let doWhile = true;
       while (doWhile) {
         await page.goto(getLink(`/stock-exchange/my`), {waitUntil: `load`});
-        await page.waitFor(`.preloader-icon`, {hidden: true, timeout: 30000});
-
+        try {
+          await page.waitFor(`.preloader-icon`, {hidden: true, timeout: 30000});
+        } catch (e) {
+          warn(`CLEARING_1_ERROR: [Bad connection]. Repeating`);
+          continue;
+        }
         let cleared = false;
 
         try {
@@ -229,8 +346,8 @@ import fetch from "node-fetch";
               s = `#requestExecutorPopup`;
               await page.waitFor(s, {hidden: true, timeout: 10000});
             }
-          }, 3, async () => {
-            warn(`Unknown trouble. Repeating`);
+          }, 3, async (e) => {
+            warn(`CLEARING_2_ERROR: [${e.message}]. Repeating`);
             await page.goto(getLink(`/stock-exchange/my`), {waitUntil: `load`});
             await page.waitFor(`.my-lot-item:first-child`);
           }, () => {
@@ -242,30 +359,50 @@ import fetch from "node-fetch";
         log(`- Adding`);
         for (let i = 0; i < db.iterations; i++) {
           try {
-            await page.goto(getLink(`/stock-exchange/${db.source}`), {waitUntil: `load`});
+            await repeatIfError(async () => {
+              await page.goto(getLink(`/stock-exchange/${db.source}`), {waitUntil: `load`});
 
-            await wClick(page, `.exchange-block__create-lot-block .btn-black`);
-            await wClick(page, `.lot-setup-popup > .lot-setup__manual-input > a`);
+              await wClick(page, `.exchange-block__create-lot-block .btn-black`);
+              await wClick(page, `.lot-setup-popup > .lot-setup__manual-input > a`);
 
-            s = `.lot-setup__field input[pattern="[0-9]*"]`;
-            rnd = rand();
-            await wClick(page, s);
-            await page.click(s, {clickCount: 2});
-            await page.type(s, db.amount + ``, {delay: rnd});
+              s = `.lot-setup__field input[pattern="[0-9]*"]`;
+              rnd = rand();
+              await wClick(page, s);
+              await page.click(s, {clickCount: 2});
+              await page.type(s, db.amount + ``, {delay: rnd});
 
-            s = `.lot-setup__cost-field-container > .lot-setup__manual-input > a`;
-            await wClick(page, s);
+              s = `.lot-setup__cost-field-container > .lot-setup__manual-input > a`;
+              await wClick(page, s);
 
-            s = `.lot-setup__cost-field-container input[pattern="[0-9]*"]`;
-            rnd = rand() + 100;
-            await wClick(page, s);
-            await page.click(s, {clickCount: 2});
-            await page.type(s, db.price + ``, {delay: rnd});
+              s = `.lot-setup__cost-field-container input[pattern="[0-9]*"]`;
+              rnd = rand() + 100;
+              await wClick(page, s);
+              await page.click(s, {clickCount: 2});
+              await page.type(s, db.price + ``, {delay: rnd});
+            }, 3, async (e) => {
+              try {
+                s = `div[data-dialog-type="exchangeNewLotLimitExceededMessage"]`;
+                await page.waitFor(s, {timeout: 5000});
+                warn(`Lot limit per day reached. Exit?`);
+                await read();
+                process.exit(0);
+              } catch (e) {
+                //
+              }
+
+              warn(`ADDING_1_ERROR: [${e.message}]. Repeating`);
+              await page.goto(getLink(`/stock-exchange/my`), {waitUntil: `load`});
+              await page.waitFor(`.my-lot-item:first-child`);
+            }, async () => {
+              warn(`Fatal error`);
+              BaseException.handle();
+            });
 
             s = `.btns-box .btn-black`;
             await wClick(page, s);
 
             try {
+              // Проверим, не закончился ли лимит (100 лотов в день)
               s = `#exchangeLotPersonalizationPopup`;
               await page.waitFor(s);
 
@@ -280,24 +417,34 @@ import fetch from "node-fetch";
 
               rnd = rand8();
 
-              await wClick(page, `.lot-message-form__name-checkbox label[for="showSellerName"]`);
+              if (rnd > 4) {
+                await wClick(page, `.lot-message-form__name-checkbox label[for="showSellerName"]`);
+              }
               await wClick(page, `#exchangeLotPersonalizationPopup .btns-box .btn-black`);
 
               s = `#exchangeLotPersonalizationPopup`;
               await page.waitFor(`#exchangeLotPersonalizationPopup`, {hidden: true});
             } catch (e) {
-              continue;
+              warn(`ADDING_2_ERROR: [${e.message}]. Continuing. This lot this lot wont have emoji`);
             }
           } catch (e) {
-            warn(e.message);
+            warn(`ADDING_CLICK_ERROR: [${e.message}]. Continuing. This lot may be unplaced`);
           }
         }
-
-        b = await getBalance(page);
-        bought = Math.floor((parseInt(b, 10) - parseInt(balance0, 10)) / db.price);
+        try {
+          b = await getBalance(page, 10000);
+          bought = Math.floor((parseInt(b, 10) - parseInt(balance0, 10)) / db.price);
+        } catch (e) {
+          b = -1;
+          bought = -1;
+        }
 
         log(`- Waiting for ${db.delay} sec.`);
-        log(`-* Balance: ${chalk.rgb(0, 0, 0).bgGreen(` ${b} `)}. Bought: ${chalk.rgb(0, 0, 0).bgGreen(` ${bought} `)}`);
+        if (b >= 0 && bought >= 0) {
+          log(`-* Balance: ${chalk.rgb(0, 0, 0).bgGreen(` ${b} `)}. Bought: ${chalk.rgb(0, 0, 0).bgGreen(` ${bought} `)}`);
+        } else {
+          log(`-* Balance: ${chalk.rgb(0, 0, 0).bgGreen(` ${b} `)}. Bought: ${chalk.rgb(0, 0, 0).bgGreen(` ${bought} `)}`);
+        }
 
         await page.waitFor(db.delay * 1000);
       }

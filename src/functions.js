@@ -12,7 +12,7 @@ export const repeatIfError = async (func, times = 1, onError, onFatal) => {
       return res;
     } catch (e) {
       times--;
-      await onError();
+      await onError(e);
     }
   }
 
@@ -191,7 +191,7 @@ export const readDb = async () => {
 };
 
 export const getBalance = async (page, timeout = -1) => {
-  const s = `.profile-popup_balance-value span`;
+  const s = `.profile-popup_balance-value`;
   if (timeout > 0) {
     await page.waitFor(s, {timeout});
   } else {
