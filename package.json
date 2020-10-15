@@ -5,8 +5,8 @@
   "main": "src/main.js",
   "scripts": {
     "start": "npm run build & node dist/main.js",
-    "exe": "npm run build & nexe -i dist/main.js -o build/tele2.exe",
-    "build": "babel ./src/**/*.js -d dist/"
+    "exe": "npm run build & nexe -i dist/main.js -o tele2.exe",
+    "build": "babel ./src/ -d dist/"
   },
   "keywords": [],
   "author": "klonwar",
@@ -14,6 +14,7 @@
   "dependencies": {
     "chalk": "^3.0.0",
     "node-fetch": "^2.6.0",
+    "odiff": "^1.4.1",
     "puppeteer": "^2.1.1",
     "puppeteer-extra": "^3.1.9",
     "puppeteer-extra-plugin-stealth": "^2.4.9",

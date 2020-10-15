@@ -1,33 +1,19 @@
 import Fs from "fs";
-import {LoginException, InternetException, BaseException} from "./exceptions";
+import {LoginException, InternetException, BaseException} from "./funcs/exceptions";
 import {
   askForCookies,
   askForDB,
-  autoRequire, getBalance,
+  autoRequire, getCentrifyingSpaces,
   isLogined, linkGetterGenerator, rand, rand8, read,
   readCookies,
   readDb, readExp, repeatIfError,
   wClick
-} from "./functions";
-import {log, printTable, warn} from "./logger";
+} from "./funcs/functions";
+import {err, log, warn} from "./logger/logger";
+import {clearAndRewrite} from "./logger/bot-screen";
+import {ProgressBar} from "./logger/progressbar";
 
 (async () => {
-
-    /*let input = `undergrounder`;
-    let grade = 0;
-    let half = Math.floor(input.length / 2);
-    let delta = (input.length % 2 === 0) ? half : half + 1;
-    for (let i = half; i >= 0; i--) {
-      let j = i + delta;
-      if (input[i] === input[j])
-        grade++;
-      else
-        grade = 0;
-    }
-
-
-    console.log(grade);*/
-
     await autoRequire(`puppeteer`);
     await autoRequire(`string-length`);
     await autoRequire(`puppeteer-extra`);
@@ -40,44 +26,54 @@ import {log, printTable, warn} from "./logger";
     const chalk = require(`chalk`);
     const fetch = require(`node-fetch`);
     const stealthPlugin = require(`puppeteer-extra-plugin-stealth`);
+    const readline = require(`readline`);
     puppeteer.use(stealthPlugin());
 
     // Настройки программы
-
     const opt = {
       dev: true,
-      origin: `https://voronezh.tele2.ru`
+      origin: `https://voronezh.tele2.ru`,
+      label: [
+        ` _____   ___   _      ___   __ `,
+        `|_   _| | __| | |    | __| |_ )`,
+        `  | |   | _|  | |__  | _|  /__|`,
+        `  |_|   |___| |____| |___|     `
+      ]
     };
+
+    const printLabel = () => {
+      for (let item of opt.label) {
+        log(getCentrifyingSpaces(item.length) + item);
+      }
+    };
+
+    printLabel();
+    log();
 
     const getLink = linkGetterGenerator(opt.origin);
 
     let balance0;
     let s;
-    let b;
     let bought;
     let rnd;
 
-
     try {
-      log(`--> Tele 2 <--`);
-
       const db = await readDb();
       await askForDB(db);
 
       const cookiesFromFile = await readCookies();
       const restoreCookies = await askForCookies(cookiesFromFile);
 
-      // log(`- Starting up`);
-
-      const browser = await puppeteer.launch({headless: !opt.dev, args: [`--start-maximized`]});
+      const browser = await puppeteer.launch({headless: db.headless, args: [`--start-maximized`]});
       const context = browser.defaultBrowserContext();
       await context.overridePermissions(getLink(), []);
       const page = await browser.newPage();
 
       await page.setViewport({width: 1400, height: 550});
 
+
       if (restoreCookies) {
-        // log(`- Restoring Cookies`);
+        // log(`-@ Restoring Cookies`);
         await page.setCookie(...cookiesFromFile);
       }
 
@@ -90,7 +86,7 @@ import {log, printTable, warn} from "./logger";
           InternetException.handle();
         });
 
-        log(`- Logging in`);
+        log(`-@ Logging in`);
         await wClick(page, `div[data-cartridge-type="LoginAction2"]`);
 
         for (let erCount = 1; erCount <= 3; erCount++) {
@@ -101,7 +97,7 @@ import {log, printTable, warn} from "./logger";
                 throw e;
               }
 
-              log(`- Cookies saved successfully`);
+              log(`-@ Cookies saved successfully`);
             });
 
             break;
@@ -117,9 +113,10 @@ import {log, printTable, warn} from "./logger";
 
             let pin;
             do {
-              log(`- Code from SMS`);
+              log(`-@ Code from SMS`);
               pin = await readExp(/[0-9]{6}/);
               s = `input[pattern="[0-9]*"]`;
+
               const inputs = await page.$$(s);
               for (let i = 0; i < 6; i++) {
                 await inputs[i].type(pin[i]);
@@ -142,7 +139,7 @@ import {log, printTable, warn} from "./logger";
                   throw e;
                 }
 
-                log(`- Cookies saved successfully`);
+                log(`-@ Cookies saved successfully`);
               });
 
               break;
@@ -159,12 +156,22 @@ import {log, printTable, warn} from "./logger";
         }
       }
 
-      s = `.dropdown-menu`;
-      await page.waitFor(s);
+      await isLogined(page);
 
       // Теле 2 хреново сделали историю лотов, приходится фиксить мне
 
       let userInfo = {};
+      const getBalanceConsoleText = () => `Bought: ${chalk.rgb(0, 0, 0).bgGreen(` ${
+        Math.floor((parseInt(userInfo.balance, 10) - parseInt(balance0, 10)) / db.price)
+      } `)}`;
+      const getClearingLines = () => [`Clearing.`, getBalanceConsoleText()];
+      const getAddingLines = () => [`Adding.`, getBalanceConsoleText()];
+      const getWaitingLines = () => [`Waiting for ${db.delay} sec.`, getBalanceConsoleText()];
+      const getRepeatingLines = () => [`Repeating.`, getBalanceConsoleText()];
+
+      const clearAndRewriteFromInfo = (lines, progressBar) => {
+        clearAndRewrite(opt.label, userInfo, lines, progressBar);
+      };
 
       await page.setRequestInterception(true);
       await page.on(`request`, async (request) => {
@@ -177,45 +184,45 @@ import {log, printTable, warn} from "./logger";
           })).json();
 
           if (response.data) {
-            if (!userInfo?.sold) {
+            // if (!userInfo?.sold) {
 
-              userInfo.sold = {
-                internet: 0,
-                calls: 0,
-              };
-              userInfo.placed = {
-                internet: 0,
-                calls: 0,
-              };
-              userInfo.dBalance = 0;
+            userInfo.sold = {
+              internet: 0,
+              calls: 0,
+            };
+            userInfo.placed = {
+              internet: 0,
+              calls: 0,
+            };
+            userInfo.dBalance = 0;
 
 
-              for (let item of response.data) {
+            for (let item of response.data) {
 
-                /**
-                 * @param item {object}
-                 * @param item.expirationDate {string}
-                 * @param item.trafficType {string}
-                 * @param item.cost {object}
-                 * */
+              /**
+               * @param item {object}
+               * @param item.expirationDate {string}
+               * @param item.trafficType {string}
+               * @param item.cost {object}
+               * */
 
-                const expirationDate = new Date(item.expirationDate);
-                const nowDate = new Date();
-                if (nowDate <= expirationDate) {
-                  if (item.trafficType === `voice`) {
-                    userInfo.placed.calls++;
-                    userInfo.sold.calls += (item.status === `bought`) ? 1 : 0;
-                  } else if (item.trafficType === `data`) {
-                    userInfo.placed.internet++;
-                    userInfo.sold.internet += (item.status === `bought`) ? 1 : 0;
-                  }
+              const expirationDate = new Date(item.expirationDate);
+              const nowDate = new Date();
+              if (nowDate <= expirationDate) {
+                if (item.trafficType === `voice`) {
+                  userInfo.placed.calls++;
+                  userInfo.sold.calls += (item.status === `bought`) ? 1 : 0;
+                } else if (item.trafficType === `data`) {
+                  userInfo.placed.internet++;
+                  userInfo.sold.internet += (item.status === `bought`) ? 1 : 0;
+                }
 
-                  if (item.status === `bought`) {
-                    userInfo.dBalance += item.cost.amount;
-                  }
+                if (item.status === `bought`) {
+                  userInfo.dBalance += item.cost.amount;
                 }
               }
             }
+            // }
 
             response.data = response.data.filter((item) => {
               if (item.status === `active`) {
@@ -228,6 +235,21 @@ import {log, printTable, warn} from "./logger";
 
               return (diff <= 1);
             });
+          }
+
+          /*
+          * Костылим, и пытаемся получить баланс
+          * */
+
+          const balanceResponse = await (await fetch(request.url().replace(`exchange/lots/created`, `balance`), {
+            method: request.method(),
+            credentials: `include`,
+            body: request.postData(),
+            headers: request.headers()
+          })).json();
+
+          if (balanceResponse.data) {
+            userInfo.balance = (balanceResponse.data.value) ? balanceResponse.data.value : userInfo.balance;
           }
 
           await request.respond({
@@ -244,24 +266,64 @@ import {log, printTable, warn} from "./logger";
           })).json();
 
           if (response.data) {
-            if (!userInfo?.rests) {
-              const item = response.data;
+            // if (!userInfo?.rests) {
+            const item = response.data;
 
-              /**
-               * @param item {object}
-               * @param item.tariffCost {object}
-               * @param item.tariffCost.amount {string}
-               * @param item.tariffPackages {object}
-               * @param item.tariffPackages.internet {string}
-               * @param item.tariffPackages.min {string}
-               * */
+            /**
+             * @param item {object}
+             * @param item.tariffCost {object}
+             * @param item.tariffCost.amount {string}
+             * @param item.tariffPackages {object}
+             * @param item.tariffPackages.internet {string}
+             * @param item.tariffPackages.min {string}
+             * @param restsItem {object}
+             * @param restsItem.rollover {boolean}
+             * @param restsItem.remain {number}
+             * @param restsItem.uom {string}
+             * */
 
-              userInfo.rests = {
-                tariffCost: item.tariffCost.amount,
-                internet: item.tariffPackages.internet,
-                calls: item.tariffPackages.min
-              };
+            const rollover = {
+              internet: 0,
+              calls: 0
+            };
+
+            for (let restsItem of item.rests) {
+              if (restsItem.rollover) {
+                switch (restsItem.uom) {
+                  case `mb`:
+                    rollover.internet += Math.round(restsItem.remain / 1024);
+                    break;
+                  case `min`:
+                    rollover.calls += restsItem.remain;
+                    break;
+                }
+              }
             }
+
+            userInfo.rests = {
+              tariffCost: item.tariffCost.amount,
+              internet: item.tariffPackages.internet,
+              calls: item.tariffPackages.min,
+              rollover
+            };
+            // }
+          }
+
+          await request.respond({
+            status: 200,
+            contentType: `application/json`,
+            body: JSON.stringify(response),
+          });
+        } else if (request.url().endsWith(`balance`) && request.method() === `GET`) {
+          const response = await (await fetch(request.url(), {
+            method: request.method(),
+            credentials: `include`,
+            body: request.postData(),
+            headers: request.headers()
+          })).json();
+
+          if (response.data) {
+            userInfo.balance = (response.data.value) ? response.data.value : userInfo.balance;
           }
 
           await request.respond({
@@ -279,25 +341,6 @@ import {log, printTable, warn} from "./logger";
       await page.waitFor(`.preloader-icon`, {hidden: true, timeout: 30000});
       // await page.waitFor(900000);
 
-      if (userInfo.sold && userInfo.rests) {
-        let pfDelta = userInfo.dBalance - userInfo.rests.tariffCost;
-        let pfString = `${((pfDelta >= 0)) ? chalk.green(`+ ` + Math.abs(pfDelta) + ` р.`) : chalk.red(`- ` + Math.abs(pfDelta) + ` р.`)}`;
-
-        printTable(`CURRENT PERIOD DYNAMICS:`, [
-          `Calls: ${chalk.green(userInfo.sold.calls)} lot${(userInfo.sold.calls !== 1) ? `s` : ``} / ${userInfo.placed.calls} bought`,
-          `Internet: ${chalk.green(userInfo.sold.internet)} lot${(userInfo.sold.internet !== 1) ? `s` : ``} / ${userInfo.placed.internet} bought`,
-          `Balance: ${chalk.green(`+ ${userInfo.dBalance} р.`)}`
-        ], `ACCOUNT INFO:`, [
-          `Calls left: ${userInfo.rests.calls} МИН`,
-          `Internet left: ${userInfo.rests.internet}`,
-          `Tariff cost: ${userInfo.rests.tariffCost} р.`,
-        ], `Profit: ${pfString}`);
-      } else {
-        printTable([
-          `NO INFO`
-        ]);
-      }
-
       // Цикл удаление - заполнение
 
       let doWhile = true;
@@ -311,58 +354,84 @@ import {log, printTable, warn} from "./logger";
         }
         let cleared = false;
 
-        try {
-          await page.waitFor(`.my-lot-item:first-child`, {timeout: 3000});
-        } catch (e) {
-          cleared = true;
-        }
 
         if (!balance0) {
-          balance0 = await getBalance(page);
+          balance0 = userInfo.balance;
         }
 
-        b = await getBalance(page);
-        bought = Math.floor((parseInt(b, 10) - parseInt(balance0, 10)) / db.price);
+        bought = Math.floor((parseInt(userInfo.balance, 10) - parseInt(balance0, 10)) / db.price);
 
-        log(`- Clearing.`);
-        log(`-* Balance: ${chalk.rgb(0, 0, 0).bgGreen(` ${b} `)}. Bought: ${chalk.rgb(0, 0, 0).bgGreen(` ${bought} `)}`);
 
-        while (!cleared && await page.$(`.my-lot-item:first-child .icon-edit`) !== null) {
+        const isLotsCleared = async () => {
+          cleared = false;
+          try {
+            await page.waitFor(`.my-active-lots__list > .my-lot-item:first-child:not(.inactive)`, {timeout: 5000});
+          } catch (e) {
+            cleared = true;
+          }
+
+          return cleared;
+        };
+
+        await clearAndRewriteFromInfo(getClearingLines());
+
+        cleared = await isLotsCleared();
+        if (!cleared) {
+          const progressBar = new ProgressBar(4);
+          await clearAndRewriteFromInfo(getClearingLines(), progressBar);
+        }
+
+        while (!cleared) {
           await repeatIfError(async () => {
-            await wClick(page, `.my-lot-item:first-child .icon-edit`);
+            if (!(await isLotsCleared())) {
+              const progressBar = new ProgressBar(4);
+              progressBar.incAndRewrite();
 
-            s = `#exchangeEditLotPopup .btns-box .btn:not(.btn-black)`;
-            await wClick(page, s);
+              await wClick(page, `.my-active-lots__list > .my-lot-item:first-child .icon-edit`);
 
-            s = `#requestExecutorPopup .btns-box .btn:not(.btn-black)`;
-            await wClick(page, s);
+              s = `#exchangeEditLotPopup .btns-box .btn:not(.btn-black)`;
+              await wClick(page, s);
 
-            try {
-              s = `#requestExecutorPopup`;
-              await page.waitFor(s, {hidden: true, timeout: 10000});
-            } catch (e) {
+              progressBar.incAndRewrite();
+
               s = `#requestExecutorPopup .btns-box .btn:not(.btn-black)`;
               await wClick(page, s);
-              s = `#requestExecutorPopup`;
-              await page.waitFor(s, {hidden: true, timeout: 10000});
+
+              progressBar.incAndRewrite();
+
+              try {
+                s = `#requestExecutorPopup`;
+                await page.waitFor(s, {hidden: true, timeout: 10000});
+              } catch (e) {
+                s = `#requestExecutorPopup .btns-box .btn:not(.btn-black)`;
+                await wClick(page, s);
+                s = `#requestExecutorPopup`;
+                await page.waitFor(s, {hidden: true, timeout: 10000});
+              }
+              progressBar.incAndRewrite();
             }
           }, 3, async (e) => {
             warn(`CLEARING_2_ERROR: [${e.message}]. Repeating`);
             await page.goto(getLink(`/stock-exchange/my`), {waitUntil: `load`});
-            await page.waitFor(`.my-lot-item:first-child`);
           }, () => {
             warn(`Fatal error`);
             BaseException.handle();
           });
         }
 
-        log(`- Adding`);
         for (let i = 0; i < db.iterations; i++) {
           try {
-            await repeatIfError(async () => {
-              await page.goto(getLink(`/stock-exchange/${db.source}`), {waitUntil: `load`});
+            let progressBar = new ProgressBar(3);
 
+            await repeatIfError(async () => {
+              progressBar = new ProgressBar(3);
+              await clearAndRewriteFromInfo(getAddingLines(), progressBar);
+
+              await page.goto(getLink(`/stock-exchange/${db.source}`), {waitUntil: `load`});
               await wClick(page, `.exchange-block__create-lot-block .btn-black`);
+
+              progressBar.incAndRewrite();
+
               await wClick(page, `.lot-setup-popup > .lot-setup__manual-input > a`);
 
               s = `.lot-setup__field input[pattern="[0-9]*"]`;
@@ -386,8 +455,8 @@ import {log, printTable, warn} from "./logger";
                 warn(`Lot limit per day reached. Exit?`);
                 await read();
                 process.exit(0);
-              } catch (e) {
-                //
+              } catch (err2) {
+                process.exit(0);
               }
 
               warn(`ADDING_1_ERROR: [${e.message}]. Repeating`);
@@ -401,10 +470,12 @@ import {log, printTable, warn} from "./logger";
             s = `.btns-box .btn-black`;
             await wClick(page, s);
 
+            progressBar.incAndRewrite();
+
             try {
               // Проверим, не закончился ли лимит (100 лотов в день)
               s = `#exchangeLotPersonalizationPopup`;
-              await page.waitFor(s);
+              await page.waitFor(s, {timeout: 10000});
 
               rnd = rand8();
               s = `.emoji-field__available-values-block img:nth-child(${rnd})`;
@@ -417,10 +488,13 @@ import {log, printTable, warn} from "./logger";
 
               rnd = rand8();
 
-              if (rnd > 4) {
+              if (rnd === 4) {
                 await wClick(page, `.lot-message-form__name-checkbox label[for="showSellerName"]`);
               }
+
               await wClick(page, `#exchangeLotPersonalizationPopup .btns-box .btn-black`);
+
+              progressBar.incAndRewrite();
 
               s = `#exchangeLotPersonalizationPopup`;
               await page.waitFor(`#exchangeLotPersonalizationPopup`, {hidden: true});
@@ -431,28 +505,34 @@ import {log, printTable, warn} from "./logger";
             warn(`ADDING_CLICK_ERROR: [${e.message}]. Continuing. This lot may be unplaced`);
           }
         }
-        try {
-          b = await getBalance(page, 10000);
-          bought = Math.floor((parseInt(b, 10) - parseInt(balance0, 10)) / db.price);
-        } catch (e) {
-          b = -1;
-          bought = -1;
+
+        const progressBar = new ProgressBar();
+        const progressMax = progressBar.progressMaxSymbols;
+        const tick = db.delay * 1000 / progressMax;
+
+        await clearAndRewriteFromInfo(getWaitingLines(), progressBar);
+
+        for (let i = 1; i <= progressMax; i++) {
+          progressBar.rewriteAndInc();
+          await page.waitFor(tick);
         }
 
-        log(`- Waiting for ${db.delay} sec.`);
-        if (b >= 0 && bought >= 0) {
-          log(`-* Balance: ${chalk.rgb(0, 0, 0).bgGreen(` ${b} `)}. Bought: ${chalk.rgb(0, 0, 0).bgGreen(` ${bought} `)}`);
-        } else {
-          log(`-* Balance: ${chalk.rgb(0, 0, 0).bgGreen(` ${b} `)}. Bought: ${chalk.rgb(0, 0, 0).bgGreen(` ${bought} `)}`);
-        }
+        readline.cursorTo(process.stdout, 0);
+        readline.clearLine(process.stdout, 0);
+        readline.moveCursor(process.stdout, 0, -1);
+        readline.clearLine(process.stdout, 0);
 
-        await page.waitFor(db.delay * 1000);
+        bought = Math.floor((parseInt(userInfo.balance, 10) - parseInt(balance0, 10)) / db.price);
+
+        await clearAndRewriteFromInfo(getRepeatingLines());
+
+        // await page.waitFor(db.delay * 1000);
       }
     } catch (e) {
       if (e instanceof BaseException) {
-        console.error(e.message);
+        err(e.message);
       } else {
-        console.error(e.message);
+        err(e.message);
       }
     }
   }
