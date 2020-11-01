@@ -6,7 +6,7 @@
   "scripts": {
     "start": "npm run build & node dist/main.js",
     "exe": "npm run build & nexe -i dist/main.js -o tele2.exe",
-    "build": "babel ./src/ -d dist/"
+    "build": "babel ./src/ -d dist/ --copy-files"
   },
   "keywords": [],
   "author": "klonwar",

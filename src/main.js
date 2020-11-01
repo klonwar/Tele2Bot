@@ -12,6 +12,8 @@ import {
 import {err, log, warn} from "./logger/logger";
 import {clearAndRewrite} from "./logger/bot-screen";
 import {ProgressBar} from "./logger/progressbar";
+import {openNewBrowser} from "./modules/refresh-browser";
+import opt from "./config/config.json";
 
 (async () => {
     await autoRequire(`puppeteer`);
@@ -22,116 +24,69 @@ import {ProgressBar} from "./logger/progressbar";
     await autoRequire(`readline`);
     await autoRequire(`puppeteer-extra-plugin-stealth`);
 
-    const puppeteer = require(`puppeteer-extra`);
     const chalk = require(`chalk`);
     const fetch = require(`node-fetch`);
-    const stealthPlugin = require(`puppeteer-extra-plugin-stealth`);
     const readline = require(`readline`);
-    puppeteer.use(stealthPlugin());
 
     // Настройки программы
-    const opt = {
-      dev: true,
-      origin: `https://voronezh.tele2.ru`,
-      label: [
-        ` _____   ___   _      ___   __ `,
-        `|_   _| | __| | |    | __| |_ )`,
-        `  | |   | _|  | |__  | _|  /__|`,
-        `  |_|   |___| |____| |___|     `
-      ]
-    };
 
     const printLabel = () => {
       for (let item of opt.label) {
         log(getCentrifyingSpaces(item.length) + item);
       }
     };
-
-    printLabel();
-    log();
-
+    
     const getLink = linkGetterGenerator(opt.origin);
 
-    let balance0;
     let s;
-    let bought;
     let rnd;
 
+    let userInfo = {
+      balance0: 0
+    };
+
     try {
+      printLabel();
+      log();
+
+      // Загрузим сохраненную информацию
+
       const db = await readDb();
       await askForDB(db);
 
       const cookiesFromFile = await readCookies();
       const restoreCookies = await askForCookies(cookiesFromFile);
 
-      const browser = await puppeteer.launch({headless: db.headless, args: [`--start-maximized`]});
-      const context = browser.defaultBrowserContext();
-      await context.overridePermissions(getLink(), []);
-      const page = await browser.newPage();
+      // Запускаем и настраиваем браузер
 
-      await page.setViewport({width: 1400, height: 550});
+      const openBrowserAndGetPage = async () => {
+        const browser = await openNewBrowser(getLink(), db.headless);
+        let page = await browser.newPage();
+        await page.setViewport(opt.viewport);
+        return {browser, page};
+      };
+      const {page} = await openBrowserAndGetPage();
 
+      // Логинимся
 
-      if (restoreCookies) {
-        // log(`-@ Restoring Cookies`);
-        await page.setCookie(...cookiesFromFile);
-      }
+      const loginIntoTele2 = async () => {
+        if (restoreCookies) {
+          await page.setCookie(...cookiesFromFile);
+        }
 
-      await page.goto(getLink(), {waitUntil: `load`}).catch(() => {
-        InternetException.handle();
-      });
-
-      if (!(await isLogined(page))) {
         await page.goto(getLink(), {waitUntil: `load`}).catch(() => {
           InternetException.handle();
         });
 
-        log(`-@ Logging in`);
-        await wClick(page, `div[data-cartridge-type="LoginAction2"]`);
+        if (!(await isLogined(page))) {
+          await page.goto(getLink(), {waitUntil: `load`}).catch(() => {
+            InternetException.handle();
+          });
 
-        for (let erCount = 1; erCount <= 3; erCount++) {
-          if (await isLogined(page)) {
-            const cookies = await page.cookies();
-            await Fs.writeFile(`./db/cookies.json`, JSON.stringify(cookies, null, 2), (e) => {
-              if (e) {
-                throw e;
-              }
+          log(`-@ Logging in`);
+          await wClick(page, `div[data-cartridge-type="LoginAction2"]`);
 
-              log(`-@ Cookies saved successfully`);
-            });
-
-            break;
-          }
-
-          try {
-            s = `form.keycloak-login-form input[type="tel"]`;
-            await wClick(page, s);
-            await wClick(page, s, 500);
-            await page.type(s, db.phone + ``);
-
-            await wClick(page, `form.keycloak-login-form button[type="submit"]`);
-
-            let pin;
-            do {
-              log(`-@ Code from SMS`);
-              pin = await readExp(/[0-9]{6}/);
-              s = `input[pattern="[0-9]*"]`;
-
-              const inputs = await page.$$(s);
-              for (let i = 0; i < 6; i++) {
-                await inputs[i].type(pin[i]);
-                await page.waitFor(100);
-              }
-            } while (await (async () => {
-              try {
-                await page.waitFor(`.static-error-text`, {timeout: 5000});
-                warn(`Wrong code. Repeating`);
-                return true;
-              } catch (e) {
-                return false;
-              }
-            })());
-
+          for (let erCount = 1; erCount <= 3; erCount++) {
             if (await isLogined(page)) {
               const cookies = await page.cookies();
               await Fs.writeFile(`./db/cookies.json`, JSON.stringify(cookies, null, 2), (e) => {
@@ -145,24 +100,65 @@ import {ProgressBar} from "./logger/progressbar";
               break;
             }
 
-            warn(`Unknown trouble. Repeating`);
-          } catch (e) {
-            warn(`LOGIN: [${e.message}]. Repeating`);
-          }
+            try {
+              s = `form.keycloak-login-form input[type="tel"]`;
+              await wClick(page, s);
+              await wClick(page, s, 500);
+              await page.type(s, db.phone + ``);
 
-          if (erCount === 3) {
-            LoginException.handle();
+              await wClick(page, `form.keycloak-login-form button[type="submit"]`);
+
+              let pin;
+              do {
+                log(`-@ Code from SMS`);
+                pin = await readExp(/[0-9]{6}/);
+                s = `input[pattern="[0-9]*"]`;
+
+                const inputs = await page.$$(s);
+                for (let i = 0; i < 6; i++) {
+                  await inputs[i].type(pin[i]);
+                  await page.waitFor(100);
+                }
+              } while (await (async () => {
+                try {
+                  await page.waitFor(`.static-error-text`, {timeout: 5000});
+                  warn(`Wrong code. Repeating`);
+                  return true;
+                } catch (e) {
+                  return false;
+                }
+              })());
+
+              if (await isLogined(page)) {
+                const cookies = await page.cookies();
+                await Fs.writeFile(`./db/cookies.json`, JSON.stringify(cookies, null, 2), (e) => {
+                  if (e) {
+                    throw e;
+                  }
+
+                  log(`-@ Cookies saved successfully`);
+                });
+
+                break;
+              }
+
+              warn(`Unknown trouble. Repeating`);
+            } catch (e) {
+              warn(`LOGIN: [${e.message}]. Repeating`);
+            }
+
+            if (erCount === 3) {
+              LoginException.handle();
+            }
           }
         }
-      }
+        await isLogined(page);
+      };
+      await loginIntoTele2();
 
-      await isLogined(page);
-
-      // Теле 2 хреново сделали историю лотов, приходится фиксить мне
-
-      let userInfo = {};
+      // Подготовим красивую консоль
       const getBalanceConsoleText = () => `Bought: ${chalk.rgb(0, 0, 0).bgGreen(` ${
-        Math.floor((parseInt(userInfo.balance, 10) - parseInt(balance0, 10)) / db.price)
+        Math.floor((parseInt(userInfo.balance, 10) - parseInt(userInfo.balance0, 10)) / db.price)
       } `)}`;
       const getClearingLines = () => [`Clearing.`, getBalanceConsoleText()];
       const getAddingLines = () => [`Adding.`, getBalanceConsoleText()];
@@ -172,6 +168,8 @@ import {ProgressBar} from "./logger/progressbar";
       const clearAndRewriteFromInfo = (lines, progressBar) => {
         clearAndRewrite(opt.label, userInfo, lines, progressBar);
       };
+
+      // Теле 2 хреново сделали историю лотов, приходится фиксить мне
 
       await page.setRequestInterception(true);
       await page.on(`request`, async (request) => {
@@ -184,8 +182,6 @@ import {ProgressBar} from "./logger/progressbar";
           })).json();
 
           if (response.data) {
-            // if (!userInfo?.sold) {
-
             userInfo.sold = {
               internet: 0,
               calls: 0,
@@ -336,42 +332,42 @@ import {ProgressBar} from "./logger/progressbar";
         }
       });
 
-
-      await page.goto(getLink(`/stock-exchange/my`), {waitUntil: `load`});
-      await page.waitFor(`.preloader-icon`, {hidden: true, timeout: 30000});
-      // await page.waitFor(900000);
-
       // Цикл удаление - заполнение
 
-      let doWhile = true;
-      while (doWhile) {
-        await page.goto(getLink(`/stock-exchange/my`), {waitUntil: `load`});
+      const gotoWithPreloader = async (link) => {
+        await page.goto(getLink(link), {waitUntil: `load`});
         try {
           await page.waitFor(`.preloader-icon`, {hidden: true, timeout: 30000});
         } catch (e) {
-          warn(`CLEARING_1_ERROR: [Bad connection]. Repeating`);
-          continue;
+          warn(`"${link}": [Bad connection]. Repeating`);
         }
-        let cleared = false;
+      };
 
-
-        if (!balance0) {
-          balance0 = userInfo.balance;
-        }
-
-        bought = Math.floor((parseInt(userInfo.balance, 10) - parseInt(balance0, 10)) / db.price);
-
-
-        const isLotsCleared = async () => {
+      let cleared = false;
+      const isLotsCleared = async () => {
+        if (!page.url().match(/stock-exchange\/my/)) {
+          warn(`CLEARING_ERROR: [wrong page]. "cleared" set to false`);
           cleared = false;
-          try {
-            await page.waitFor(`.my-active-lots__list > .my-lot-item:first-child:not(.inactive)`, {timeout: 5000});
-          } catch (e) {
-            cleared = true;
-          }
-
           return cleared;
-        };
+        }
+        cleared = false;
+        try {
+          await page.waitFor(`.my-active-lots > .my-active-lots__list > .my-lot-item:first-child:not(.inactive)`, {timeout: 5000});
+        } catch (e) {
+          cleared = true;
+        }
+
+        return cleared;
+      };
+
+      let doWhile = true;
+      while (doWhile) {
+        // Перейдем на страницу с лотами, чтобы перехватить запрос и получить инфу о профиле
+        await gotoWithPreloader(`/stock-exchange/my`);
+
+        if (!userInfo.balance0 && userInfo.balance) {
+          userInfo.balance0 = userInfo.balance;
+        }
 
         await clearAndRewriteFromInfo(getClearingLines());
 
@@ -381,57 +377,79 @@ import {ProgressBar} from "./logger/progressbar";
           await clearAndRewriteFromInfo(getClearingLines(), progressBar);
         }
 
+        // Удаляем все выложенные лоты
+
         while (!cleared) {
           await repeatIfError(async () => {
+            // Открываем страницу с выложенными лотами
+            await gotoWithPreloader(`/stock-exchange/my`);
+
             if (!(await isLotsCleared())) {
-              const progressBar = new ProgressBar(4);
+              const progressBar = new ProgressBar(5);
               progressBar.incAndRewrite();
 
+              // Открываем окно редактирования лота
               await wClick(page, `.my-active-lots__list > .my-lot-item:first-child .icon-edit`);
+              progressBar.incAndRewrite();
 
+              // "Отменить"
               s = `#exchangeEditLotPopup .btns-box .btn:not(.btn-black)`;
               await wClick(page, s);
-
               progressBar.incAndRewrite();
 
+              // "Вы действительно хотите?"
               s = `#requestExecutorPopup .btns-box .btn:not(.btn-black)`;
               await wClick(page, s);
-
               progressBar.incAndRewrite();
 
+              let clWarning;
               try {
+                // Окно закрылось
                 s = `#requestExecutorPopup`;
                 await page.waitFor(s, {hidden: true, timeout: 10000});
+
               } catch (e) {
-                s = `#requestExecutorPopup .btns-box .btn:not(.btn-black)`;
-                await wClick(page, s);
-                s = `#requestExecutorPopup`;
-                await page.waitFor(s, {hidden: true, timeout: 10000});
+                // Окно не закрылось? Да и хрен с ним, продолжаем
+
+                /*
+                  // Попытка повторного закрытия окна
+                  s = `#requestExecutorPopup .btns-box .btn:not(.btn-black)`;
+                  await wClick(page, s);
+                */
+                clWarning = e.message;
               }
+
               progressBar.incAndRewrite();
+              if (clWarning) {
+                warn(`CLEARING_WARNING: [${clWarning.message}]. Continuing`);
+              }
             }
           }, 3, async (e) => {
-            warn(`CLEARING_2_ERROR: [${e.message}]. Repeating`);
-            await page.goto(getLink(`/stock-exchange/my`), {waitUntil: `load`});
+            warn(`CLEARING_ERROR: [${e.message}]. Repeating`);
           }, () => {
             warn(`Fatal error`);
             BaseException.handle();
           });
         }
 
+        // Добавляем лоты
+
         for (let i = 0; i < db.iterations; i++) {
           try {
-            let progressBar = new ProgressBar(3);
+            let progressBar = new ProgressBar(7);
 
             await repeatIfError(async () => {
-              progressBar = new ProgressBar(3);
+              // Открываем страницу с соответствующим выкладываемым типами лотов
+              await gotoWithPreloader(`/stock-exchange/${db.source}`);
+
+              progressBar = new ProgressBar(7);
               await clearAndRewriteFromInfo(getAddingLines(), progressBar);
 
-              await page.goto(getLink(`/stock-exchange/${db.source}`), {waitUntil: `load`});
+              // Открываем окно для выкладываения лота
               await wClick(page, `.exchange-block__create-lot-block .btn-black`);
-
               progressBar.incAndRewrite();
 
+              // Нажимаем на поле и вводим количество
               await wClick(page, `.lot-setup-popup > .lot-setup__manual-input > a`);
 
               s = `.lot-setup__field input[pattern="[0-9]*"]`;
@@ -439,7 +457,9 @@ import {ProgressBar} from "./logger/progressbar";
               await wClick(page, s);
               await page.click(s, {clickCount: 2});
               await page.type(s, db.amount + ``, {delay: rnd});
+              progressBar.incAndRewrite();
 
+              // Нажимаем на поле и вводим цену
               s = `.lot-setup__cost-field-container > .lot-setup__manual-input > a`;
               await wClick(page, s);
 
@@ -448,7 +468,9 @@ import {ProgressBar} from "./logger/progressbar";
               await wClick(page, s);
               await page.click(s, {clickCount: 2});
               await page.type(s, db.price + ``, {delay: rnd});
+              progressBar.incAndRewrite();
             }, 3, async (e) => {
+              // Закончился лимит на лоты
               try {
                 s = `div[data-dialog-type="exchangeNewLotLimitExceededMessage"]`;
                 await page.waitFor(s, {timeout: 5000});
@@ -459,45 +481,50 @@ import {ProgressBar} from "./logger/progressbar";
                 process.exit(0);
               }
 
+              // Ошибка, но лот выложен не был, так что при повторении дублирования не будет
               warn(`ADDING_1_ERROR: [${e.message}]. Repeating`);
-              await page.goto(getLink(`/stock-exchange/my`), {waitUntil: `load`});
-              await page.waitFor(`.my-lot-item:first-child`);
             }, async () => {
               warn(`Fatal error`);
               BaseException.handle();
             });
 
+            // Добавляем лот нажатием на кнопку
             s = `.btns-box .btn-black`;
             await wClick(page, s);
 
             progressBar.incAndRewrite();
 
             try {
-              // Проверим, не закончился ли лимит (100 лотов в день)
+              // Зададим смайлики
               s = `#exchangeLotPersonalizationPopup`;
               await page.waitFor(s, {timeout: 10000});
 
+              // Выберем рандомный и кликнем три раза на него
               rnd = rand8();
               s = `.emoji-field__available-values-block img:nth-child(${rnd})`;
 
-              rnd = rand();
-              await wClick(page, s);
-              await wClick(page, s, rnd);
-              await wClick(page, s, rnd);
-              await page.waitFor(rnd);
+              await page.waitFor(s);
+              await page.click(s);
+              await page.click(s);
+              await page.click(s);
 
               rnd = rand8();
 
+              // Иногда будем делать лот анонимным
               if (rnd === 4) {
                 await wClick(page, `.lot-message-form__name-checkbox label[for="showSellerName"]`);
               }
-
-              await wClick(page, `#exchangeLotPersonalizationPopup .btns-box .btn-black`);
-
               progressBar.incAndRewrite();
 
+              // Сохраним текущие настройки
+              await wClick(page, `#exchangeLotPersonalizationPopup .btns-box .btn-black`);
+              progressBar.incAndRewrite();
+
+              // Подождем, пока окно пропадет
               s = `#exchangeLotPersonalizationPopup`;
               await page.waitFor(`#exchangeLotPersonalizationPopup`, {hidden: true});
+              progressBar.incAndRewrite();
+
             } catch (e) {
               warn(`ADDING_2_ERROR: [${e.message}]. Continuing. This lot this lot wont have emoji`);
             }
@@ -506,27 +533,42 @@ import {ProgressBar} from "./logger/progressbar";
           }
         }
 
+        // Подготовимся к ожиданию. Разделим интервал ожидания на некоторое количество промежутков
+
         const progressBar = new ProgressBar();
         const progressMax = progressBar.progressMaxSymbols;
         const tick = db.delay * 1000 / progressMax;
 
         await clearAndRewriteFromInfo(getWaitingLines(), progressBar);
 
+        // В течение каждого промежутка будем перерисовывать прогрессбар
         for (let i = 1; i <= progressMax; i++) {
           progressBar.rewriteAndInc();
           await page.waitFor(tick);
         }
 
+        // Магическими строчками что-то очистим
         readline.cursorTo(process.stdout, 0);
         readline.clearLine(process.stdout, 0);
         readline.moveCursor(process.stdout, 0, -1);
         readline.clearLine(process.stdout, 0);
 
-        bought = Math.floor((parseInt(userInfo.balance, 10) - parseInt(balance0, 10)) / db.price);
-
+        // Покажем, что бот не завис
         await clearAndRewriteFromInfo(getRepeatingLines());
 
-        // await page.waitFor(db.delay * 1000);
+        /*
+            // Неудачная попытка возвращения работоспособности
+            await page.close();
+            page = await browser.newPage();
+        */
+
+        // Сохраним куки, вдруг поменялись
+        const cookies = await page.cookies();
+        await Fs.writeFile(`./db/cookies.json`, JSON.stringify(cookies, null, 2), (e) => {
+          if (e) {
+            throw e;
+          }
+        });
       }
     } catch (e) {
       if (e instanceof BaseException) {

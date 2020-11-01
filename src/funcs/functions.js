@@ -354,6 +354,10 @@ export const getMetrics = (length) => ({
   spaces: Math.floor(((process.stdout.columns - length >= 0) ? (process.stdout.columns - length) : 0) / 2)
 });
 
+export const waitFor = async (time) => {
+  await new Promise((resolve) => setTimeout(resolve, time));
+};
+
 export const getCentrifyingSpaces = (length) => {
   let spaces = ``;
   for (let i = 0; i < getMetrics(length).spaces; i++) {
@@ -361,8 +365,4 @@ export const getCentrifyingSpaces = (length) => {
   }
 
   return spaces;
-};
-
-export const waitFor = async (time) => {
-  await new Promise((resolve) => setTimeout(resolve, time));
 };
