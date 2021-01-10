@@ -370,214 +370,224 @@ import opt from "./config/config.json";
 
       let doWhile = true;
       while (doWhile) {
-        // Перейдем на страницу с лотами, чтобы перехватить запрос и получить инфу о профиле
-        await gotoWithPreloader(`/stock-exchange/my`);
+        try {
+          // Перейдем на страницу с лотами, чтобы перехватить запрос и получить инфу о профиле
+          await gotoWithPreloader(`/stock-exchange/my`);
 
-        if (!userInfo.balance0 && userInfo.balance) {
-          userInfo.balance0 = userInfo.balance;
-        }
+          if (!userInfo.balance0 && userInfo.balance) {
+            userInfo.balance0 = userInfo.balance;
+          }
 
-        await clearAndRewriteFromInfo(getClearingLines());
+          await clearAndRewriteFromInfo(getClearingLines());
 
-        cleared = await isLotsCleared();
-        if (!cleared) {
-          const progressBar = new ProgressBar(4);
-          await clearAndRewriteFromInfo(getClearingLines(), progressBar);
-        }
+          cleared = await isLotsCleared();
+          if (!cleared) {
+            const progressBar = new ProgressBar(4);
+            await clearAndRewriteFromInfo(getClearingLines(), progressBar);
+          }
 
-        // Удаляем все выложенные лоты
+          // Удаляем все выложенные лоты
 
-        while (!cleared) {
-          await repeatIfError(async () => {
-            // Открываем страницу с выложенными лотами
-            await gotoWithPreloader(`/stock-exchange/my`);
-
-            if (!(await isLotsCleared())) {
-              const progressBar = new ProgressBar(5);
-              progressBar.incAndRewrite();
-
-              // Открываем окно редактирования лота
-              await wClick(page, `.my-active-lots__list > .my-lot-item:first-child .icon-edit`);
-              progressBar.incAndRewrite();
-
-              // "Отменить"
-              s = `#exchangeEditLotPopup .btns-box .btn:not(.btn-black)`;
-              await wClick(page, s);
-              progressBar.incAndRewrite();
-
-              // "Вы действительно хотите?"
-              s = `#requestExecutorPopup .btns-box .btn:not(.btn-black)`;
-              await wClick(page, s);
-              progressBar.incAndRewrite();
-
-              let clWarning;
-              try {
-                // Окно закрылось
-                s = `#requestExecutorPopup`;
-                await page.waitFor(s, {hidden: true, timeout: 10000});
-
-              } catch (e) {
-                // Окно не закрылось? Да и хрен с ним, продолжаем
-
-                /*
-                  // Попытка повторного закрытия окна
-                  s = `#requestExecutorPopup .btns-box .btn:not(.btn-black)`;
-                  await wClick(page, s);
-                */
-                clWarning = e.message;
-              }
-
-              progressBar.incAndRewrite();
-              if (clWarning) {
-                warn(`CLEARING_WARNING: [${clWarning}]. Continuing`);
-              }
-            }
-          }, 3, async (e) => {
-            warn(`CLEARING_ERROR: [${e.message}]. Repeating`);
-          }, () => {
-            warn(`Fatal error`);
-            BaseException.handle();
-          });
-        }
-
-        // Добавляем лоты
-
-        for (let i = 0; i < db.iterations; i++) {
-          try {
-            let progressBar = new ProgressBar(7);
-
+          while (!cleared) {
             await repeatIfError(async () => {
-              // Открываем страницу с соответствующим выкладываемым типами лотов
-              await gotoWithPreloader(`/stock-exchange/${db.source}`);
+              // Открываем страницу с выложенными лотами
+              await gotoWithPreloader(`/stock-exchange/my`);
 
-              progressBar = new ProgressBar(7);
-              await clearAndRewriteFromInfo(getAddingLines(), progressBar);
+              if (!(await isLotsCleared())) {
+                const progressBar = new ProgressBar(5);
+                progressBar.incAndRewrite();
 
-              // Открываем окно для выкладываения лота
-              await wClick(page, `.exchange-block__create-lot-block .btn-black`);
-              progressBar.incAndRewrite();
+                // Открываем окно редактирования лота
+                await wClick(page, `.my-active-lots__list > .my-lot-item:first-child .icon-edit`);
+                progressBar.incAndRewrite();
 
-              // Нажимаем на поле и вводим количество
-              await wClick(page, `.lot-setup-popup > .lot-setup__manual-input > a`);
+                // "Отменить"
+                s = `#exchangeEditLotPopup .btns-box .btn:not(.btn-black)`;
+                await wClick(page, s);
+                progressBar.incAndRewrite();
 
-              s = `.lot-setup__field input[pattern="[0-9]*"]`;
-              rnd = rand();
-              await wClick(page, s);
-              await page.click(s, {clickCount: 2});
-              await page.type(s, db.amount + ``, {delay: rnd});
-              progressBar.incAndRewrite();
+                // "Вы действительно хотите?"
+                s = `#requestExecutorPopup .btns-box .btn:not(.btn-black)`;
+                await wClick(page, s);
+                progressBar.incAndRewrite();
 
-              // Нажимаем на поле и вводим цену
-              s = `.lot-setup__cost-field-container > .lot-setup__manual-input > a`;
-              await wClick(page, s);
+                let clWarning;
+                try {
+                  // Окно закрылось
+                  s = `#requestExecutorPopup`;
+                  await page.waitFor(s, {hidden: true, timeout: 10000});
 
-              s = `.lot-setup__cost-field-container input[pattern="[0-9]*"]`;
-              rnd = rand() + 100;
-              await wClick(page, s);
-              await page.click(s, {clickCount: 2});
-              await page.type(s, db.price + ``, {delay: rnd});
-              progressBar.incAndRewrite();
-            }, 3, async (e) => {
-              // Закончился лимит на лоты
-              try {
-                s = `div[data-dialog-type="exchangeNewLotLimitExceededMessage"]`;
-                await page.waitFor(s, {timeout: 5000});
-                warn(`Lot limit per day reached. Exit?`);
-                await read();
-                process.exit(0);
-              } catch (err2) {
-                // А нет, не закончился
-                warn(`ADDING_1_ERROR: [${err2.message}]. Continuing`);
+                } catch (e) {
+                  // Окно не закрылось? Да и хрен с ним, продолжаем
+
+                  /*
+                    // Попытка повторного закрытия окна
+                    s = `#requestExecutorPopup .btns-box .btn:not(.btn-black)`;
+                    await wClick(page, s);
+                  */
+                  clWarning = e.message;
+                }
+
+                progressBar.incAndRewrite();
+                if (clWarning) {
+                  warn(`CLEARING_WARNING: [${clWarning}]. Continuing`);
+                }
               }
-
-              // Ошибка, но лот выложен не был, так что при повторении дублирования не будет
-              warn(`ADDING_1_ERROR: [${e.message}]. Repeating`);
-            }, async () => {
+            }, 3, async (e) => {
+              warn(`CLEARING_ERROR: [${e.message}]. Repeating`);
+            }, () => {
               warn(`Fatal error`);
               BaseException.handle();
             });
-
-            // Добавляем лот нажатием на кнопку
-            s = `.btns-box .btn-black`;
-            await wClick(page, s);
-
-            progressBar.incAndRewrite();
-
-            try {
-              // Зададим смайлики
-              s = `#exchangeLotPersonalizationPopup`;
-              await page.waitFor(s, {timeout: 10000});
-
-              // Выберем рандомный и кликнем три раза на него
-              rnd = rand8();
-              s = `.emoji-field__available-values-block img:nth-child(${rnd})`;
-
-              await page.waitFor(s);
-              await page.click(s);
-              await page.click(s);
-              await page.click(s);
-
-              rnd = rand8();
-
-              // Иногда будем делать лот анонимным
-              if (rnd === 4) {
-                await wClick(page, `.lot-message-form__name-checkbox label[for="showSellerName"]`);
-              }
-              progressBar.incAndRewrite();
-
-              // Сохраним текущие настройки
-              await wClick(page, `#exchangeLotPersonalizationPopup .btns-box .btn-black`);
-              progressBar.incAndRewrite();
-
-              // Подождем, пока окно пропадет
-              s = `#exchangeLotPersonalizationPopup`;
-              await page.waitFor(`#exchangeLotPersonalizationPopup`, {hidden: true});
-              progressBar.incAndRewrite();
-
-            } catch (e) {
-              warn(`ADDING_2_ERROR: [${e.message}]. Continuing. This lot this lot wont have emoji`);
-            }
-          } catch (e) {
-            warn(`ADDING_CLICK_ERROR: [${e.message}]. Continuing. This lot may be unplaced`);
           }
-        }
 
-        // Подготовимся к ожиданию. Разделим интервал ожидания на некоторое количество промежутков
+          // Добавляем лоты
 
-        const progressBar = new ProgressBar();
-        const progressMax = progressBar.progressMaxSymbols;
-        const tick = db.delay * 1000 / progressMax;
+          for (let i = 0; i < db.iterations; i++) {
+            try {
+              let progressBar = new ProgressBar(7);
 
-        await clearAndRewriteFromInfo(getWaitingLines(), progressBar);
+              await repeatIfError(async () => {
+                // Открываем страницу с соответствующим выкладываемым типами лотов
+                await gotoWithPreloader(`/stock-exchange/${db.source}`);
 
-        // В течение каждого промежутка будем перерисовывать прогрессбар
-        for (let i = 1; i <= progressMax; i++) {
-          progressBar.rewriteAndInc();
-          await page.waitFor(tick);
-        }
+                progressBar = new ProgressBar(7);
+                await clearAndRewriteFromInfo(getAddingLines(), progressBar);
 
-        // Магическими строчками что-то очистим
-        readline.cursorTo(process.stdout, 0);
-        readline.clearLine(process.stdout, 0);
-        readline.moveCursor(process.stdout, 0, -1);
-        readline.clearLine(process.stdout, 0);
+                // Открываем окно для выкладываения лота
+                await wClick(page, `.exchange-block__create-lot-block .btn-black`);
+                progressBar.incAndRewrite();
 
-        // Покажем, что бот не завис
-        await clearAndRewriteFromInfo(getRepeatingLines());
+                // Нажимаем на поле и вводим количество
+                await wClick(page, `.lot-setup-popup > .lot-setup__manual-input > a`);
 
-        /*
-            // Неудачная попытка возвращения работоспособности
-            await page.close();
-            page = await browser.newPage();
-        */
+                s = `.lot-setup__field input[pattern="[0-9]*"]`;
+                rnd = rand();
+                await wClick(page, s);
+                await page.click(s, {clickCount: 2});
+                await page.type(s, db.amount + ``, {delay: rnd});
+                progressBar.incAndRewrite();
 
-        // Сохраним куки, вдруг поменялись
-        const cookies = await page.cookies();
-        await Fs.writeFile(`./db/cookies.json`, JSON.stringify(cookies, null, 2), (e) => {
-          if (e) {
+                // Нажимаем на поле и вводим цену
+                s = `.lot-setup__cost-field-container > .lot-setup__manual-input > a`;
+                await wClick(page, s);
+
+                s = `.lot-setup__cost-field-container input[pattern="[0-9]*"]`;
+                rnd = rand() + 100;
+                await wClick(page, s);
+                await page.click(s, {clickCount: 2});
+                await page.type(s, db.price + ``, {delay: rnd});
+                progressBar.incAndRewrite();
+              }, 3, async (e) => {
+                // Закончился лимит на лоты
+                try {
+                  s = `div[data-dialog-type="exchangeNewLotLimitExceededMessage"]`;
+                  await page.waitFor(s, {timeout: 5000});
+                  warn(`Lot limit per day reached. Exit?`);
+                  await read();
+                  process.exit(0);
+                } catch (err2) {
+                  // А нет, не закончился
+                  warn(`ADDING_1_ERROR: [${err2.message}]. Continuing`);
+                }
+
+                // Ошибка, но лот выложен не был, так что при повторении дублирования не будет
+                warn(`ADDING_1_ERROR: [${e.message}]. Repeating`);
+              }, async () => {
+                warn(`Fatal error`);
+                BaseException.handle();
+              });
+
+              // Добавляем лот нажатием на кнопку
+              s = `.btns-box .btn-black`;
+              await wClick(page, s);
+
+              progressBar.incAndRewrite();
+
+              try {
+                // Зададим смайлики
+                s = `#exchangeLotPersonalizationPopup`;
+                await page.waitFor(s, {timeout: 10000});
+
+                // Выберем рандомный и кликнем три раза на него
+                rnd = rand8();
+                s = `.emoji-field__available-values-block img:nth-child(${rnd})`;
+
+                await page.waitFor(s);
+                await page.click(s);
+                await page.click(s);
+                await page.click(s);
+
+                rnd = rand8();
+
+                // Иногда будем делать лот анонимным
+                if (rnd === 4) {
+                  await wClick(page, `.lot-message-form__name-checkbox label[for="showSellerName"]`);
+                }
+                progressBar.incAndRewrite();
+
+                // Сохраним текущие настройки
+                await wClick(page, `#exchangeLotPersonalizationPopup .btns-box .btn-black`);
+                progressBar.incAndRewrite();
+
+                // Подождем, пока окно пропадет
+                s = `#exchangeLotPersonalizationPopup`;
+                await page.waitFor(`#exchangeLotPersonalizationPopup`, {hidden: true});
+                progressBar.incAndRewrite();
+
+              } catch (e) {
+                warn(`ADDING_2_ERROR: [${e.message}]. Continuing. This lot this lot wont have emoji`);
+              }
+            } catch (e) {
+              warn(`ADDING_CLICK_ERROR: [${e.message}]. Continuing. This lot may be unplaced`);
+            }
+          }
+
+          // Подготовимся к ожиданию. Разделим интервал ожидания на некоторое количество промежутков
+
+          const progressBar = new ProgressBar();
+          const progressMax = progressBar.progressMaxSymbols;
+          const tick = db.delay * 1000 / progressMax;
+
+          await clearAndRewriteFromInfo(getWaitingLines(), progressBar);
+
+          // В течение каждого промежутка будем перерисовывать прогрессбар
+          for (let i = 1; i <= progressMax; i++) {
+            progressBar.rewriteAndInc();
+            await page.waitFor(tick);
+          }
+
+          // Магическими строчками что-то очистим
+          readline.cursorTo(process.stdout, 0);
+          readline.clearLine(process.stdout, 0);
+          readline.moveCursor(process.stdout, 0, -1);
+          readline.clearLine(process.stdout, 0);
+
+          // Покажем, что бот не завис
+          await clearAndRewriteFromInfo(getRepeatingLines());
+
+          /*
+              // Неудачная попытка возвращения работоспособности
+              await page.close();
+              page = await browser.newPage();
+          */
+
+          // Сохраним куки, вдруг поменялись
+          const cookies = await page.cookies();
+          await Fs.writeFile(`./db/cookies.json`, JSON.stringify(cookies, null, 2), (e) => {
+            if (e) {
+              throw e;
+            }
+          });
+
+        } catch (e) {
+          if (e.message.includes(`Navigation timeout`)) {
+            warn(`ITERATION_ERROR: [${e.message}]. Repeating`);
+            continue;
+          } else {
             throw e;
           }
-        });
+        }
       }
     } catch (e) {
       if (e instanceof BaseException) {
