@@ -1,12 +1,19 @@
 import Fs from "fs";
-import {LoginException, InternetException, BaseException} from "./funcs/exceptions";
+import {BaseException, InternetException, LoginException} from "./funcs/exceptions";
 import {
   askForCookies,
   askForDB,
-  autoRequire, getCentrifyingSpaces,
-  isLogined, linkGetterGenerator, rand, rand8, read,
+  autoRequire,
+  getCentrifyingSpaces,
+  isLogined,
+  linkGetterGenerator,
+  rand,
+  rand8,
+  read,
   readCookies,
-  readDb, readExp, repeatIfError,
+  readDb,
+  readExp,
+  repeatIfError,
   wClick
 } from "./funcs/functions";
 import {err, log, warn} from "./logger/logger";
@@ -35,7 +42,7 @@ import opt from "./config/config.json";
         log(getCentrifyingSpaces(item.length) + item);
       }
     };
-    
+
     const getLink = linkGetterGenerator(opt.origin);
 
     let s;
@@ -157,6 +164,7 @@ import opt from "./config/config.json";
       await loginIntoTele2();
 
       // Подготовим красивую консоль
+
       const getBalanceConsoleText = () => `Bought: ${chalk.rgb(0, 0, 0).bgGreen(` ${
         Math.floor((parseInt(userInfo.balance, 10) - parseInt(userInfo.balance0, 10)) / db.price)
       } `)}`;
@@ -421,7 +429,7 @@ import opt from "./config/config.json";
 
               progressBar.incAndRewrite();
               if (clWarning) {
-                warn(`CLEARING_WARNING: [${clWarning.message}]. Continuing`);
+                warn(`CLEARING_WARNING: [${clWarning}]. Continuing`);
               }
             }
           }, 3, async (e) => {
@@ -478,7 +486,8 @@ import opt from "./config/config.json";
                 await read();
                 process.exit(0);
               } catch (err2) {
-                process.exit(0);
+                // А нет, не закончился
+                warn(`ADDING_1_ERROR: [${err2.message}]. Continuing`);
               }
 
               // Ошибка, но лот выложен не был, так что при повторении дублирования не будет
@@ -572,7 +581,7 @@ import opt from "./config/config.json";
       }
     } catch (e) {
       if (e instanceof BaseException) {
-        err(e.message);
+        err(`[BaseException] ${e.message}`);
       } else {
         err(e.message);
       }
