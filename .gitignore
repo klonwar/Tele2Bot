@@ -5,6 +5,7 @@ db/
 src/test*.js
 .idea/
 *.exe
+*.rar
 !build/tele2.exe
 package-lock.json
 .eslintrc.yml
