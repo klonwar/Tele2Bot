@@ -13,7 +13,7 @@ import {
   readCookies,
   readDb,
   readExp,
-  repeatIfError,
+  repeatIfError, waitFor,
   wClick
 } from "./funcs/functions";
 import {err, log, warn} from "./logger/logger";
@@ -291,6 +291,7 @@ import opt from "./config/config.json";
               calls: 0
             };
 
+
             for (let restsItem of item.rests) {
               if (restsItem.rollover) {
                 switch (restsItem.uom) {
@@ -483,8 +484,8 @@ import opt from "./config/config.json";
                 try {
                   s = `div[data-dialog-type="exchangeNewLotLimitExceededMessage"]`;
                   await page.waitFor(s, {timeout: 5000});
-                  warn(`Lot limit per day reached. Exit?`);
-                  await read();
+                  warn(`Lot limit per day reached. `);
+                  await waitFor(5000);
                   process.exit(0);
                 } catch (err2) {
                   // А нет, не закончился
