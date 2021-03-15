@@ -1,6 +1,4 @@
-import {fillSucc, inf, log} from "./logger/logger";
-import readFile from "./funcs/read-file";
-import {clearScreen, read} from "./funcs/functions";
+import {log} from "./logger/logger";
 
 (async () => {
 

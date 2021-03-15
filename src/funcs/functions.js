@@ -107,16 +107,16 @@ export const rewriteDb = async (db) => {
   log(`--@ Phone WITHOUT 8`);
   db.phone = await readExp(/[0-9]{10}/);
 
-  log(`--@ Number of active lots (default = 3)`);
+  log(`--@ Number of active lots (default = 1)`);
   db.iterations = await readExp(/(^[0-9]{1,2}$)|(^\s*$)/);
   if (db.iterations.match(new RegExp(/^\s*$/))) {
-    db.iterations = 3;
+    db.iterations = 1;
   }
 
-  log(`--@ Delay between attempts in seconds (default = 60)`);
-  db.delay = await readExp(/(^[0-9]{1,2}$)|(^\s*$)/);
+  log(`--@ Delay between attempts in seconds (default = 80)`);
+  db.delay = await readExp(/(^[0-9]{1,3}$)|(^\s*$)/);
   if (db.delay.match(new RegExp(/^\s*$/))) {
-    db.delay = 60;
+    db.delay = 80;
   }
 
   log(`--@ Minutes? [Y/N] (default = Y)`);

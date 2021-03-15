@@ -9,11 +9,11 @@ import {
   linkGetterGenerator,
   rand,
   rand8,
-  read,
   readCookies,
   readDb,
   readExp,
-  repeatIfError, waitFor,
+  repeatIfError,
+  waitFor,
   wClick
 } from "./funcs/functions";
 import {err, log, warn} from "./logger/logger";
@@ -69,7 +69,6 @@ import opt from "./config/config.json";
       const openBrowserAndGetPage = async () => {
         const browser = await openNewBrowser(getLink(), db.headless);
         let page = await browser.newPage();
-        await page.setViewport(opt.viewport);
         return {browser, page};
       };
       const {page} = await openBrowserAndGetPage();
@@ -168,10 +167,11 @@ import opt from "./config/config.json";
       const getBalanceConsoleText = () => `Bought: ${chalk.rgb(0, 0, 0).bgGreen(` ${
         Math.floor((parseInt(userInfo.balance, 10) - parseInt(userInfo.balance0, 10)) / db.price)
       } `)}`;
-      const getClearingLines = () => [`Clearing.`, getBalanceConsoleText()];
-      const getAddingLines = () => [`Adding.`, getBalanceConsoleText()];
-      const getWaitingLines = () => [`Waiting for ${db.delay} sec.`, getBalanceConsoleText()];
-      const getRepeatingLines = () => [`Repeating.`, getBalanceConsoleText()];
+      const getLotsList = () => `Active: ${userInfo?.active?.list?.map((item) => `[${item.volume.value} ${item.volume.uom}]`).join(` `)}`;
+      const getClearingLines = () => [`Clearing.`, getBalanceConsoleText(), getLotsList()];
+      const getAddingLines = () => [`Adding.`, getBalanceConsoleText(), getLotsList()];
+      const getWaitingLines = () => [`Waiting for ${db.delay} sec.`, getBalanceConsoleText(), getLotsList()];
+      const getRepeatingLines = () => [`Repeating.`, getBalanceConsoleText(), getLotsList()];
 
       const clearAndRewriteFromInfo = (lines, progressBar) => {
         clearAndRewrite(opt.label, userInfo, lines, progressBar);
@@ -198,8 +198,12 @@ import opt from "./config/config.json";
               internet: 0,
               calls: 0,
             };
+            userInfo.active = {
+              calls: 0,
+              internet: 0,
+              list: []
+            };
             userInfo.dBalance = 0;
-
 
             for (let item of response.data) {
 
@@ -216,9 +220,11 @@ import opt from "./config/config.json";
                 if (item.trafficType === `voice`) {
                   userInfo.placed.calls++;
                   userInfo.sold.calls += (item.status === `bought`) ? 1 : 0;
+                  userInfo.active.calls += (item.status === `active`) ? 1 : 0;
                 } else if (item.trafficType === `data`) {
                   userInfo.placed.internet++;
                   userInfo.sold.internet += (item.status === `bought`) ? 1 : 0;
+                  userInfo.active.internet += (item.status === `active`) ? 1 : 0;
                 }
 
                 if (item.status === `bought`) {
@@ -230,6 +236,7 @@ import opt from "./config/config.json";
 
             response.data = response.data.filter((item) => {
               if (item.status === `active`) {
+                userInfo.active.list.push(item);
                 return true;
               }
 
@@ -239,6 +246,7 @@ import opt from "./config/config.json";
 
               return (diff <= 1);
             });
+
           }
 
           /*
@@ -389,6 +397,11 @@ import opt from "./config/config.json";
 
           // Удаляем все выложенные лоты
 
+          // todo удалить, если бот снова будет актуален
+
+          console.log(`!! Waiting for ${db.delay} sec !!`);
+          await page.waitFor(parseInt(db.delay, 10) * 1000);
+
           while (!cleared) {
             await repeatIfError(async () => {
               // Открываем страницу с выложенными лотами
@@ -430,6 +443,7 @@ import opt from "./config/config.json";
                 }
 
                 progressBar.incAndRewrite();
+                await clearAndRewriteFromInfo(getClearingLines(), progressBar);
                 if (clWarning) {
                   warn(`CLEARING_WARNING: [${clWarning}]. Continuing`);
                 }
@@ -445,6 +459,13 @@ import opt from "./config/config.json";
           // Добавляем лоты
 
           for (let i = 0; i < db.iterations; i++) {
+            // Перейдем на страницу с лотами, чтобы перехватить запрос и получить инфу о профиле
+            await gotoWithPreloader(`/stock-exchange/my`);
+
+            if (userInfo.active[db.source] >= db.iterations) {
+              break;
+            }
+
             try {
               let progressBar = new ProgressBar(7);
 
@@ -479,6 +500,7 @@ import opt from "./config/config.json";
                 await page.click(s, {clickCount: 2});
                 await page.type(s, db.price + ``, {delay: rnd});
                 progressBar.incAndRewrite();
+                await clearAndRewriteFromInfo(getAddingLines(), progressBar);
               }, 3, async (e) => {
                 // Закончился лимит на лоты
                 try {
@@ -534,7 +556,9 @@ import opt from "./config/config.json";
                 // Подождем, пока окно пропадет
                 s = `#exchangeLotPersonalizationPopup`;
                 await page.waitFor(`#exchangeLotPersonalizationPopup`, {hidden: true});
+
                 progressBar.incAndRewrite();
+                await clearAndRewriteFromInfo(getAddingLines(), progressBar);
 
               } catch (e) {
                 warn(`ADDING_2_ERROR: [${e.message}]. Continuing. This lot this lot wont have emoji`);
@@ -545,6 +569,9 @@ import opt from "./config/config.json";
           }
 
           // Подготовимся к ожиданию. Разделим интервал ожидания на некоторое количество промежутков
+
+          // Перейдем на страницу с лотами, чтобы перехватить запрос и получить инфу о профиле
+          await gotoWithPreloader(`/stock-exchange/my`);
 
           const progressBar = new ProgressBar();
           const progressMax = progressBar.progressMaxSymbols;
@@ -561,8 +588,9 @@ import opt from "./config/config.json";
           // Магическими строчками что-то очистим
           readline.cursorTo(process.stdout, 0);
           readline.clearLine(process.stdout, 0);
-          readline.moveCursor(process.stdout, 0, -1);
-          readline.clearLine(process.stdout, 0);
+
+          // Перейдем на страницу с лотами, чтобы перехватить запрос и получить инфу о профиле
+          await gotoWithPreloader(`/stock-exchange/my`);
 
           // Покажем, что бот не завис
           await clearAndRewriteFromInfo(getRepeatingLines());
