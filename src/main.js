@@ -291,6 +291,7 @@ import opt from "./config/config.json";
              * @param restsItem.uom {string}
              * */
 
+            
             const rollover = {
               internet: 0,
               calls: 0
@@ -301,7 +302,7 @@ import opt from "./config/config.json";
               if (restsItem.rollover) {
                 switch (restsItem.uom) {
                   case `mb`:
-                    rollover.internet += Math.round(restsItem.remain / 1024);
+                    rollover.internet += restsItem.remain / 1024;
                     break;
                   case `min`:
                     rollover.calls += restsItem.remain;
@@ -314,7 +315,10 @@ import opt from "./config/config.json";
               tariffCost: item.tariffCost.amount,
               internet: item.tariffPackages.internet,
               calls: item.tariffPackages.min,
-              rollover
+              sellable: {
+                internet: (parseFloat(item.tariffPackages.internet.replace(`,`, `.`)) - rollover.internet).toFixed(1),
+                calls: item.tariffPackages.min - rollover.calls
+              }
             };
             // }
           }

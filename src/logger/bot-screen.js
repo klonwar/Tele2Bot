@@ -61,8 +61,8 @@ export const clearAndRewrite = async (label, userInfo, textAfterTable, progressB
       `Balance change: ${chalk.green(`+ ${userInfo.dBalance} р.`)}`
     ], `ACCOUNT INFO:`, [
       `Balance: ${userInfo.balance} p.`,
-      `Calls: ${userInfo.rests.calls} МИН (rollover ${userInfo.rests.rollover.calls} МИН)`,
-      `Internet: ${userInfo.rests.internet} (rollover ${userInfo.rests.rollover.internet} ГБ)`,
+      `Calls: ${userInfo.rests.calls} МИН (sellable ${userInfo.rests.sellable.calls} МИН)`,
+      `Internet: ${userInfo.rests.internet} (sellable ${userInfo.rests.sellable.internet} ГБ)`,
       `Tariff cost: ${userInfo.rests.tariffCost} р.`,
     ], `Profit: ${pfString}`);
   } else {
