@@ -119,11 +119,11 @@ import opt from "./config/config.json";
                 const inputs = await page.$$(s);
                 for (let i = 0; i < 6; i++) {
                   await inputs[i].type(pin[i]);
-                  await page.waitFor(100);
+                  await page.waitForTimeout(100);
                 }
               } while (await (async () => {
                 try {
-                  await page.waitFor(`.static-error-text`, {timeout: 5000});
+                  await page.waitForSelector(`.static-error-text`, {timeout: 5000});
                   warn(`Wrong code. Repeating`);
                   return true;
                 } catch (e) {
@@ -291,7 +291,7 @@ import opt from "./config/config.json";
              * @param restsItem.uom {string}
              * */
 
-            
+
             const rollover = {
               internet: 0,
               calls: 0
@@ -355,7 +355,7 @@ import opt from "./config/config.json";
       const gotoWithPreloader = async (link) => {
         await page.goto(getLink(link), {waitUntil: `load`});
         try {
-          await page.waitFor(`.preloader-icon`, {hidden: true, timeout: 30000});
+          await page.waitForSelector(`.preloader-icon`, {hidden: true, timeout: 30000});
         } catch (e) {
           warn(`"${link}": [Bad connection]. Repeating`);
         }
@@ -391,7 +391,7 @@ import opt from "./config/config.json";
           // В течение каждого промежутка будем перерисовывать прогрессбар
           for (let i = 1; i <= progressMax; i++) {
             progressBar.rewriteAndInc();
-            await page.waitFor(tick);
+            await page.waitForTimeout(tick);
           }
 
           // Магическими строчками что-то очистим

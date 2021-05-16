@@ -1,5 +1,3 @@
-/* global document */
-
 import {log} from "../logger/logger";
 
 const Fs = require(`fs`);
@@ -40,7 +38,7 @@ export const linkGetterGenerator = (origin) => (link = ``) => {
 export const isLogined = async (page, timeout = 3000) => {
   try {
     const s = `header .header-navbar-login .gtm-new-navigation-lk`;
-    await page.waitFor(s, {timeout});
+    await page.waitForSelector(s, {timeout});
     return true;
   } catch (e) {
     return false;
@@ -222,9 +220,9 @@ export const rand8 = () => {
 
 export const wClick = async (page, s, time = -1) => {
   if (time > 0) {
-    await page.waitFor(time);
+    await page.waitForTimeout(time);
   } else {
-    await page.waitFor(s);
+    await page.waitForSelector(s);
   }
   await page.click(s);
 };
