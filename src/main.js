@@ -287,6 +287,7 @@ import opt from "./config/config.json";
              * @param item.tariffPackages.min {string}
              * @param restsItem {object}
              * @param restsItem.rollover {boolean}
+             * @param restsItem.giftPackage {boolean}
              * @param restsItem.remain {number}
              * @param restsItem.uom {string}
              * */
@@ -299,7 +300,7 @@ import opt from "./config/config.json";
 
 
             for (let restsItem of item.rests) {
-              if (restsItem.rollover) {
+              if (restsItem.rollover || restsItem.giftPackage) {
                 switch (restsItem.uom) {
                   case `mb`:
                     rollover.internet += restsItem.remain / 1024;
