@@ -63,7 +63,7 @@ import opt from "./config/config.json";
       // Запускаем и настраиваем браузер
 
       const openBrowserAndGetPage = async () => {
-        const browser = await openNewBrowser(getLink(), false);
+        const browser = await openNewBrowser(getLink(), db.headless);
         let page = await browser.newPage();
         return {browser, page};
       };
