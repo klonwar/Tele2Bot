@@ -9,7 +9,7 @@ import {
   linkGetterGenerator,
   readCookies,
   readDb,
-  readExp,
+  readExp, waitFor,
   wClick
 } from "./funcs/functions";
 import {err, log, warn} from "./logger/logger";
@@ -63,7 +63,7 @@ import opt from "./config/config.json";
       // Запускаем и настраиваем браузер
 
       const openBrowserAndGetPage = async () => {
-        const browser = await openNewBrowser(getLink(), db.headless);
+        const browser = await openNewBrowser(getLink(), false);
         let page = await browser.newPage();
         return {browser, page};
       };
@@ -86,7 +86,7 @@ import opt from "./config/config.json";
           });
 
           log(`-@ Logging in`);
-          await wClick(page, `div[data-cartridge-type="LoginAction2"]`);
+          await wClick(page, `span.login-action-short-text`);
 
           for (let erCount = 1; erCount <= 3; erCount++) {
             if (await isLogined(page)) {
@@ -114,13 +114,11 @@ import opt from "./config/config.json";
               do {
                 log(`-@ Code from SMS`);
                 pin = await readExp(/[0-9]{6}/);
-                s = `input[pattern="[0-9]*"]`;
+                s = `input[name="SMS"]`;
 
-                const inputs = await page.$$(s);
-                for (let i = 0; i < 6; i++) {
-                  await inputs[i].type(pin[i]);
-                  await page.waitForTimeout(100);
-                }
+                const input = await page.$(s);
+                await input.type(pin);
+                await page.waitForTimeout(100);
               } while (await (async () => {
                 try {
                   await page.waitForSelector(`.static-error-text`, {timeout: 5000});
